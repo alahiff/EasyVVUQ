@@ -49,7 +49,9 @@ class ActionStatusSLURM():
 
     def __init__(self, script, script_name, target_dir):
         self.script = script
-        self.script_name = script_name
+        self.script_name = os.path.join(target_dir, script_name)
+        with open(self.script_name, 'w') as fd:
+            fd.write(self.script)
         self.target_dir = target_dir
         self._started = False
 
