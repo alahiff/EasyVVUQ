@@ -29,6 +29,7 @@ class CopyEncoder(BaseEncoder, encoder_name="copy_encoder"):
     target_filename : str
       a target filename inside the simulation directory
     """
+
     def __init__(self, source_filename, target_filename):
         self.source_filename = source_filename
         self.target_filename = target_filename
@@ -56,5 +57,4 @@ class CopyEncoder(BaseEncoder, encoder_name="copy_encoder"):
 
     def element_version(self):
         return "0.1"
-        
 
