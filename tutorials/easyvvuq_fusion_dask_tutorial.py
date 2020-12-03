@@ -67,14 +67,14 @@ if __name__ == '__main__':      ### This is needed if you are using a local clus
     print(str, file=open('fusion.template','w'))
     """
 
-    # Create an encoder, and decoder for PCE test app
+    # Create an encoder and decoder for PCE test app
     encoder = uq.encoders.GenericEncoder(template_fname='fusion.template',
                                          delimiter='$',
                                          target_filename='fusion_in.json')
 
 
     decoder = uq.decoders.SimpleCSV(target_filename="output.csv",
-                                    output_columns=["te", "ne", "rho", "rho_norm"],)
+                                    output_columns=["te", "ne", "rho", "rho_norm"])
 
     # Add the app (automatically set as current app)
     my_campaign.add_app(name="fusion",
@@ -116,6 +116,7 @@ if __name__ == '__main__':      ### This is needed if you are using a local clus
     print('Time for phase 2 = %.3f' % (time_end-time_start))
     time_start = time.time()
 
+    # Create and populate the run directories
     my_campaign.populate_runs_dir()
 
     time_end = time.time()
@@ -138,12 +139,13 @@ if __name__ == '__main__':      ### This is needed if you are using a local clus
     my_campaign.apply_for_each_run_dir(uq.actions.ExecuteLocal(cmd, interpret='python3'), client)
 
     client.close()
-    client.shutdown()
+#    client.shutdown()
     
     time_end = time.time()
     print('Time for phase 4 = %.3f' % (time_end-time_start))
     time_start = time.time()
 
+    # Collate the results
     my_campaign.collate()
 
     time_end = time.time()
@@ -159,11 +161,9 @@ if __name__ == '__main__':      ### This is needed if you are using a local clus
 
     # Get Descriptive Statistics
     results = my_campaign.get_last_analysis()
-    stats = results['statistical_moments']['te']
-    per = results['percentiles']['te']
-    sobols = results['sobols_first']['te']
-    rho = results['statistical_moments']['rho']['mean']
-    rho_norm = results['statistical_moments']['rho_norm']['mean']
+    te = results.describe()['te'].T
+    rho = results.describe()['rho'].T['mean']
+    rho_norm = results.describe()['rho_norm'].T['mean']
 
     time_end = time.time()
     print('Time for phase 7 = %.3f' % (time_end-time_start))
@@ -181,47 +181,64 @@ if __name__ == '__main__':      ### This is needed if you are using a local clus
 
     plt.ion()
 
+    # plot the calculated Te: mean, with std deviation, 10 and 90% and range
     plt.figure() 
-    plt.plot(rho, stats['mean'], 'b-', label='Mean')
-    plt.plot(rho, stats['mean']-stats['std'], 'b--', label='+1 std deviation')
-    plt.plot(rho, stats['mean']+stats['std'], 'b--')
-    plt.fill_between(rho, stats['mean']-stats['std'], stats['mean']+stats['std'], color='b', alpha=0.2)
-    plt.plot(rho, per['p10'].ravel(), 'b:', label='10 and 90 percentiles')
-    plt.plot(rho, per['p90'].ravel(), 'b:')
-    plt.fill_between(rho, per['p10'].ravel(), per['p90'].ravel(), color='b', alpha=0.1)
-    plt.fill_between(rho, [r.lower[0] for r in results['output_distributions']['te']], [r.upper[0] for r in results['output_distributions']['te']], color='b', alpha=0.05)
+    plt.plot(rho, te['mean'], 'b-', label='Mean')
+    plt.plot(rho, te['mean']-te['std'], 'b--', label='+1 std deviation')
+    plt.plot(rho, te['mean']+te['std'], 'b--')
+    plt.fill_between(rho, te['mean']-te['std'], te['mean']+te['std'], color='b', alpha=0.2)
+    plt.plot(rho, te['10%'].ravel(), 'b:', label='10 and 90 percentiles')
+    plt.plot(rho, te['90%'].ravel(), 'b:')
+    plt.fill_between(rho, te['10%'].ravel(), te['90%'].ravel(), color='b', alpha=0.1)
+    plt.fill_between(rho, [r.lower[0] for r in results.raw_data['output_distributions']['te']],
+                          [r.upper[0] for r in results.raw_data['output_distributions']['te']], 
+                               color='b', alpha=0.05)
     plt.legend(loc=0)
     plt.xlabel('rho [m]')
     plt.ylabel('Te [eV]')
     plt.title(my_campaign.campaign_dir)
     plt.savefig('Te.png')
 
+    # plot the first Sobol results
     plt.figure() 
-    for k in sobols.keys(): plt.plot(rho, sobols[k][0], label=k)
+    for k in results.sobols_first()['te'].keys(): plt.plot(rho, results.sobols_first()['te'][k], label=k)
     plt.legend(loc=0)
     plt.xlabel('rho [m]')
     plt.ylabel('sobols_first')
     plt.title(my_campaign.campaign_dir)
     plt.savefig('sobols_first.png')
 
+    # plot the second Sobol results
     plt.figure() 
-    for k in results['sobols_total']['te'].keys(): plt.plot(rho, results['sobols_total']['te'][k][0], label=k)
+    for k1 in results.sobols_second()['te'].keys(): 
+        for k2 in results.sobols_second()['te'][k1].keys():
+            plt.plot(rho, results.sobols_second()['te'][k1][k2], label=k1+'/'+k2)
+    plt.legend(loc=0, ncol=3)    
+    plt.xlabel('rho [m]')
+    plt.ylabel('sobols_second') 
+    plt.title(my_campaign.campaign_dir+'\n')
+    plt.savefig('sobols_second.png')
+
+    # plot the total Sobol results
+    plt.figure() 
+    for k in results.sobols_total()['te'].keys(): plt.plot(rho, results.sobols_total()['te'][k], label=k)
     plt.legend(loc=0)    
     plt.xlabel('rho [m]')
     plt.ylabel('sobols_total')
     plt.title(my_campaign.campaign_dir)
     plt.savefig('sobols_total.png')
 
+    # plot the distributions
     plt.figure()
-    for i, D in enumerate(results['output_distributions']['te']):
+    for i, D in enumerate(results.raw_data['output_distributions']['te']):
         _Te = np.linspace(D.lower[0], D.upper[0], 101)
         _DF = D.pdf(_Te)
-        plt.loglog(_Te, _DF, 'b-')
-        plt.loglog(stats['mean'][i], np.interp(stats['mean'][i], _Te, _DF), 'bo')
-        plt.loglog(stats['mean'][i]-stats['std'][i], np.interp(stats['mean'][i]-stats['std'][i], _Te, _DF), 'b*')
-        plt.loglog(stats['mean'][i]+stats['std'][i], np.interp(stats['mean'][i]+stats['std'][i], _Te, _DF), 'b*')
-        plt.loglog(per['p10'].ravel()[i],  np.interp(per['p10'].ravel()[i], _Te, _DF), 'b+')
-        plt.loglog(per['p90'].ravel()[i],  np.interp(per['p90'].ravel()[i], _Te, _DF), 'b+')
+        plt.loglog(_Te, _DF, 'b-', alpha=0.25)
+        plt.loglog(te['mean'][i], np.interp(te['mean'][i], _Te, _DF), 'bo')
+        plt.loglog(te['mean'][i]-te['std'][i], np.interp(te['mean'][i]-te['std'][i], _Te, _DF), 'b*')
+        plt.loglog(te['mean'][i]+te['std'][i], np.interp(te['mean'][i]+te['std'][i], _Te, _DF), 'b*')
+        plt.loglog(te['10%'].ravel()[i],  np.interp(te['10%'].ravel()[i], _Te, _DF), 'b+')
+        plt.loglog(te['90%'].ravel()[i],  np.interp(te['90%'].ravel()[i], _Te, _DF), 'b+')
     plt.xlabel('Te')
     plt.ylabel('distribution function')
     plt.savefig('distribution_functions.png')
