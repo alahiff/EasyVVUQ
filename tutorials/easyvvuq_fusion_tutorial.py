@@ -130,9 +130,8 @@ time_start = time.time()
 
 # Get Descriptive Statistics
 results = my_campaign.get_last_analysis()
-te = results.describe()['te'].T
-rho = results.describe()['rho'].T['mean']
-rho_norm = results.describe()['rho_norm'].T['mean']
+rho = results.describe('rho', 'mean')
+rho_norm = results.describe('rho_norm', 'mean')
 
 time_end = time.time()
 print('Time for phase 7 = %.3f' % (time_end-time_start))
@@ -152,16 +151,14 @@ plt.ion()
 
 # plot the calculated Te: mean, with std deviation, 10 and 90% and range
 plt.figure() 
-plt.plot(rho, te['mean'], 'b-', label='Mean')
-plt.plot(rho, te['mean']-te['std'], 'b--', label='+1 std deviation')
-plt.plot(rho, te['mean']+te['std'], 'b--')
-plt.fill_between(rho, te['mean']-te['std'], te['mean']+te['std'], color='b', alpha=0.2)
-plt.plot(rho, te['10%'].ravel(), 'b:', label='10 and 90 percentiles')
-plt.plot(rho, te['90%'].ravel(), 'b:')
-plt.fill_between(rho, te['10%'].ravel(), te['90%'].ravel(), color='b', alpha=0.1)
-plt.fill_between(rho, [r.lower[0] for r in results.raw_data['output_distributions']['te']],
-                      [r.upper[0] for r in results.raw_data['output_distributions']['te']], 
-                           color='b', alpha=0.05)
+plt.plot(rho, results.describe('te', 'mean'), 'b-', label='Mean')
+plt.plot(rho, results.describe('te', 'mean')-results.describe('te', 'std'), 'b--', label='+1 std deviation')
+plt.plot(rho, results.describe('te', 'mean')+results.describe('te', 'std'), 'b--')
+plt.fill_between(rho, results.describe('te', 'mean')-results.describe('te', 'std'), results.describe('te', 'mean')+results.describe('te', 'std'), color='b', alpha=0.2)
+plt.plot(rho, results.describe('te', '10%'), 'b:', label='10 and 90 percentiles')
+plt.plot(rho, results.describe('te', '90%'), 'b:')
+plt.fill_between(rho, results.describe('te', '10%'), results.describe('te', '90%'), color='b', alpha=0.1)
+plt.fill_between(rho, results.describe('te', 'min'), results.describe('te', 'max'), color='b', alpha=0.05)
 plt.legend(loc=0)
 plt.xlabel('rho [m]')
 plt.ylabel('Te [eV]')
@@ -203,11 +200,11 @@ for i, D in enumerate(results.raw_data['output_distributions']['te']):
     _Te = np.linspace(D.lower[0], D.upper[0], 101)
     _DF = D.pdf(_Te)
     plt.loglog(_Te, _DF, 'b-', alpha=0.25)
-    plt.loglog(te['mean'][i], np.interp(te['mean'][i], _Te, _DF), 'bo')
-    plt.loglog(te['mean'][i]-te['std'][i], np.interp(te['mean'][i]-te['std'][i], _Te, _DF), 'b*')
-    plt.loglog(te['mean'][i]+te['std'][i], np.interp(te['mean'][i]+te['std'][i], _Te, _DF), 'b*')
-    plt.loglog(te['10%'].ravel()[i],  np.interp(te['10%'].ravel()[i], _Te, _DF), 'b+')
-    plt.loglog(te['90%'].ravel()[i],  np.interp(te['90%'].ravel()[i], _Te, _DF), 'b+')
+    plt.loglog(results.describe('te', 'mean')[i], np.interp(results.describe('te', 'mean')[i], _Te, _DF), 'bo')
+    plt.loglog(results.describe('te', 'mean')[i]-results.describe('te', 'std')[i], np.interp(results.describe('te', 'mean')[i]-results.describe('te', 'std')[i], _Te, _DF), 'b*')
+    plt.loglog(results.describe('te', 'mean')[i]+results.describe('te', 'std')[i], np.interp(results.describe('te', 'mean')[i]+results.describe('te', 'std')[i], _Te, _DF), 'b*')
+    plt.loglog(results.describe('te', '10%')[i],  np.interp(results.describe('te', '10%')[i], _Te, _DF), 'b+')
+    plt.loglog(results.describe('te', '90%')[i],  np.interp(results.describe('te', '90%')[i], _Te, _DF), 'b+')
 plt.xlabel('Te')
 plt.ylabel('distribution function')
 plt.savefig('distribution_functions.png')
