@@ -18,11 +18,11 @@ been tried.
 """
 
 import base64
+import copy
 import json
 import os
 import logging
 import requests
-import copy
 from . import BaseAction
 
 __license__ = "LGPL"
@@ -46,7 +46,8 @@ class ActionStatusProminence():
         a filename to write the output of the simulation
     """
 
-    def __init__(self, headers, body, file_names, outfile):
+    def __init__(self, url, headers, body, file_names, outfile):
+        self.url = url
         self.headers = headers
         self.body = dict(body)
         self.file_names = file_names
@@ -60,9 +61,9 @@ class ActionStatusProminence():
         """
         if self.started():
             raise RuntimeError('The job has already started!')
-        self.body['inputs'] = self.add_input_files(self.body, self.file_names)
+        self.body['inputs'] = self.add_input_files(self.file_names)
         self.id = 0
-        response = requests.post('%s/jobs' % os.environ['PROMINENCE_URL'], json=self.body, headers=self.headers)
+        response = requests.post('%s/jobs' % self.url, json=self.body, headers=self.headers)
         if response.status_code == 201:
             self._started = True
             if 'id' in response.json():
@@ -76,7 +77,7 @@ class ActionStatusProminence():
     def finished(self):
         """Will return True if the job has finished, otherwise will return False.
         """
-        response = requests.get('%s/jobs/%d?all=true' % (os.environ['PROMINENCE_URL'], self.id), headers=self.headers)
+        response = requests.get('%s/jobs/%d?all=true' % (self.url, self.id), headers=self.headers)
         if 'status' in response.json()[0]:
             if response.json()[0]['status'] == 'completed':
                 self._succeeded = True
@@ -88,11 +89,11 @@ class ActionStatusProminence():
             return False
 
     def finalise(self):
-        """Will read the std output from the job output it to a file
+        """Will read the std output from the job and write it to a file
         """
         if not (self.finished() and self.succeeded()):
             raise RuntimeError("Cannot finalise an Action that hasn't finished.")
-        response = requests.get('%s/jobs/%d/stdout' % (os.environ['PROMINENCE_URL'], self.id), headers=self.headers)
+        response = requests.get('%s/jobs/%d/stdout' % (self.url, self.id), headers=self.headers)
         with open(self.outfile, 'w') as fd:
             fd.write(response.text)
 
@@ -102,7 +103,7 @@ class ActionStatusProminence():
         """
         return self._succeeded
 
-    def add_input_files(self, job, file_names):
+    def add_input_files(self, file_names):
         """Add input files to the job description
         """
         inputs = []
@@ -119,7 +120,7 @@ class ExecuteProminence(BaseAction):
     Parameters
     ----------
 
-    pod_config : str
+    job_config : str
         Filename of the JSON file with the PROMINENCE job configuration.
     input_file_names : list of str
         A list of input file names for your simulation.
@@ -138,6 +139,7 @@ class ExecuteProminence(BaseAction):
         self.input_file_names = input_file_names
         self.output_file_name = output_file_name
         self.headers = {'Authorization':'token %s' % os.environ['PROMINENCE_TOKEN']}
+        self.url = os.environ['PROMINENCE_URL']
 
     def act_on_dir(self, target_dir):
         """Executes a containerized simulation on input files found in `target_dir`.
@@ -145,7 +147,9 @@ class ExecuteProminence(BaseAction):
         target_dir : str
             Directory in which to execute simulation.
         """
-        file_names = [os.path.join(target_dir, input_file_name) for input_file_name in self.input_file_names]
+        file_names = [os.path.join(target_dir, input_file_name)
+                      for input_file_name in self.input_file_names]
         dep = copy.deepcopy(self.dep)
         dep['name'] = target_dir
-        return ActionStatusProminence(self.headers, dep, file_names, os.path.join(target_dir, self.output_file_name))
+        return ActionStatusProminence(
+            self.url, self.headers, dep, file_names, os.path.join(target_dir, self.output_file_name))
