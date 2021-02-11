@@ -43,8 +43,6 @@ my_campaign.draw_samples()
 
 my_campaign.populate_runs_dir()
 
-cwd = os.getcwd()
-cmd = f"{cwd}/cooling_model.py cooling_in.json"
 statuses = my_campaign.apply_for_each_run_dir(uq.actions.ExecuteProminence("coffee.json", ["cooling_in.json"], "output.csv"), batch_size=3)
 statuses.start()
 
