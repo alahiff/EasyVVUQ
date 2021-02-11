@@ -1,20 +1,23 @@
 """Provides an action element to execute a simulation using PROMINENCE
-and retrieve the output. The successful use of this actions
-requires that two environment variables are setup:
+and retrieve the output. The successful use of this action
+requires that the environment variable PROMINENCE_URL exists, specifying
+the URL of the PROMINENCE REST API and that the file ~/.prominence/token
+contains JSON where "access_token" specifies a valid access token.
 
-- PROMINENCE_URL specifying the URL of the PROMINENCE REST API
-- PROMINENCE_TOKEN specifying an access token
+There are two options implemented for data access:
+(1) EasyVVUQ and PROMINENCE jobs make use of the same shared filesystem,
+making use of OneData or B2DROP for example. In this case nothing needs
+to be done to transfer input files to jobs or retrieve output files. It
+is important to ensure that B2DROP has the same mount point on the
+host running EasyVVUQ and in the jobs.
 
-The input files are passed to the jobs using the PROMINENCE input
+(2) The input files are passed to the jobs using the PROMINENCE input
 files mechanism which limits the size of the files. Output from
 the simulation is retrieved using the PROMINENCE log mechanism.
 Therefore the simulation output needs to be printed to stdout in 
 the job. Again, if the simulation produces complicated or large output
 you should extract the quantitities of interest on the Pod using some
 kind of script and print them to stdout.
-
-There are ways around this in PROMINENCE but these have not yet
-been tried.
 """
 
 import base64
@@ -46,9 +49,8 @@ class ActionStatusProminence():
         a filename to write the output of the simulation
     """
 
-    def __init__(self, url, headers, body, file_names, outfile):
+    def __init__(self, url, body, file_names, outfile):
         self.url = url
-        self.headers = headers
         self.body = dict(body)
         self.file_names = file_names
         self.outfile = outfile
@@ -61,13 +63,16 @@ class ActionStatusProminence():
         """
         if self.started():
             raise RuntimeError('The job has already started!')
-        self.body['inputs'] = self.add_input_files(self.file_names)
+        if self.file_names:
+            self.body['inputs'] = self.add_input_files(self.file_names)
         self.id = 0
-        response = requests.post('%s/jobs' % self.url, json=self.body, headers=self.headers)
+        response = requests.post('%s/jobs' % self.url, json=self.body, headers=self.create_header())
         if response.status_code == 201:
             self._started = True
             if 'id' in response.json():
                 self.id = response.json()['id']
+        else:
+            raise RuntimeError('Failed to submit job: %s' % response.text)
 
     def started(self):
         """Will return true if start() was called.
@@ -77,7 +82,10 @@ class ActionStatusProminence():
     def finished(self):
         """Will return True if the job has finished, otherwise will return False.
         """
-        response = requests.get('%s/jobs/%d?all=true' % (self.url, self.id), headers=self.headers)
+        response = requests.get('%s/jobs/%d?all=true' % (self.url, self.id), headers=self.create_header())
+        if response.status_code != 200:
+            raise RuntimeError('Got error checking status of job: %s' % response.text)
+
         if 'status' in response.json()[0]:
             if response.json()[0]['status'] == 'completed':
                 self._succeeded = True
@@ -93,9 +101,10 @@ class ActionStatusProminence():
         """
         if not (self.finished() and self.succeeded()):
             raise RuntimeError("Cannot finalise an Action that hasn't finished.")
-        response = requests.get('%s/jobs/%d/stdout' % (self.url, self.id), headers=self.headers)
-        with open(self.outfile, 'w') as fd:
-            fd.write(response.text)
+        if self.outfile:
+            response = requests.get('%s/jobs/%d/stdout' % (self.url, self.id), headers=self.create_header())
+            with open(self.outfile, 'w') as fd:
+                fd.write(response.text)
 
     def succeeded(self):
         """Will return True if the job has finished successfully, otherwise will return False.
@@ -113,6 +122,19 @@ class ActionStatusProminence():
                                'content':base64.b64encode(fd.read()).decode("utf-8")})
         return inputs
 
+    def create_header(self):
+        """Create the Authorization header. We do this for every request because the
+        token may have been updated.
+        """
+        if os.path.isfile(os.path.expanduser('~/.prominence/token')):
+            with open(os.path.expanduser('~/.prominence/token')) as json_data:
+                data = json.load(json_data)
+
+            if 'access_token' in data:
+                return {'Authorization':'token %s' % data['access_token']}
+
+        raise RuntimeError("Unable to obtain access token")
+
 class ExecuteProminence(BaseAction):
     """ Provides an action element to run a shell command in a specified
     directory.
@@ -128,7 +150,7 @@ class ExecuteProminence(BaseAction):
         An output file name for the output of the simulation.
     """
 
-    def __init__(self, job_config, input_file_names, output_file_name):
+    def __init__(self, job_config, input_file_names=None, output_file_name=None):
         if os.name == 'nt':
             msg = ('Local execution is provided for testing on Posix systems'
                    'only. We detect you are using Windows.')
@@ -138,7 +160,6 @@ class ExecuteProminence(BaseAction):
             self.dep = json.load(fd)
         self.input_file_names = input_file_names
         self.output_file_name = output_file_name
-        self.headers = {'Authorization':'token %s' % os.environ['PROMINENCE_TOKEN']}
         self.url = os.environ['PROMINENCE_URL']
 
     def act_on_dir(self, target_dir):
@@ -151,5 +172,14 @@ class ExecuteProminence(BaseAction):
                       for input_file_name in self.input_file_names]
         dep = copy.deepcopy(self.dep)
         dep['name'] = target_dir
-        return ActionStatusProminence(
-            self.url, self.headers, dep, file_names, os.path.join(target_dir, self.output_file_name))
+        tasks = []
+        for task in dep['tasks']:
+            task['workdir'] = target_dir
+            tasks.append(task)
+        dep['tasks'] = tasks
+
+        output_file_name = None
+        if self.output_file_name:
+            output_file_name = os.path.join(target_dir, self.output_file_name)
+
+        return ActionStatusProminence(self.url, dep, file_names, output_file_name)
