@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "image": "alahiff/easyvvuq",
+      "runtime": "singularity",
+      "cmd": "python3 /opt/EasyVVUQ/tutorials/cooling_model.py cooling_in.json"
+    }
+  ],
+  "resources": {
+    "cpus": 1,
+    "memory": 1,
+    "disk": 10,
+    "nodes": 1
+  },
+  "storage": {
+    "type": "b2drop",
+    "mountpoint": "/b2drop",
+    "b2drop": {
+      "app-username": "",
+      "app-password": ""
+    }
+  },
+  "policies": {
+    "maximumTimeInQueue": 120
+  }
+}
