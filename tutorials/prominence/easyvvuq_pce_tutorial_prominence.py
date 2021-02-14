@@ -48,6 +48,8 @@ statuses.start()
 
 while (statuses.progress()['ready'] + statuses.progress()['active'] > 0):
     time.sleep(2)
+    
+print('Finished running jobs, status:', statuses.progress())    
 
 my_campaign.collate()
 
