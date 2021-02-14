@@ -51,8 +51,6 @@ while (statuses.progress()['ready'] + statuses.progress()['active'] > 0):
 
 my_campaign.collate()
 
-my_campaign.save_state("campaign_state_2.json")
-
 # Post-processing analysis
 my_analysis = uq.analysis.PCEAnalysis(sampler=my_sampler, qoi_cols=["te"])
 my_campaign.apply_analysis(my_analysis)
