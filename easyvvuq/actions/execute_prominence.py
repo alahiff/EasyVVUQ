@@ -26,6 +26,8 @@ import json
 import os
 import logging
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 from . import BaseAction
 
 __license__ = "LGPL"
@@ -58,6 +60,15 @@ class ActionStatusProminence():
         self._started = False
         self.id = None
 
+        retry_strategy = Retry(
+            total=5,
+            status_forcelist=[500],
+            method_whitelist=["HEAD", "GET", "POST"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.http = requests.Session()
+        self.http.mount("https://", adapter)
+
     def start(self):
         """Will create the Prominence job and hence start the action.
         """
@@ -66,7 +77,7 @@ class ActionStatusProminence():
         if self.file_names:
             self.body['inputs'] = self.add_input_files(self.file_names)
         self.id = 0
-        response = requests.post('%s/jobs' % self.url, json=self.body, headers=self.create_header())
+        response = self.http.post('%s/jobs' % self.url, json=self.body, headers=self.create_header())
         if response.status_code == 201:
             self._started = True
             if 'id' in response.json():
@@ -82,7 +93,7 @@ class ActionStatusProminence():
     def finished(self):
         """Will return True if the job has finished, otherwise will return False.
         """
-        response = requests.get('%s/jobs/%d?all=true' % (self.url, self.id), headers=self.create_header())
+        response = self.http.get('%s/jobs/%d?all=true' % (self.url, self.id), headers=self.create_header())
         if response.status_code != 200:
             raise RuntimeError('Got error checking status of job: %s' % response.text)
 
@@ -102,7 +113,7 @@ class ActionStatusProminence():
         if not (self.finished() and self.succeeded()):
             raise RuntimeError("Cannot finalise an Action that hasn't finished.")
         if self.outfile:
-            response = requests.get('%s/jobs/%d/stdout' % (self.url, self.id), headers=self.create_header())
+            response = self.http.get('%s/jobs/%d/stdout' % (self.url, self.id), headers=self.create_header())
             with open(self.outfile, 'w') as fd:
                 fd.write(response.text)
 
