@@ -12,11 +12,11 @@ is important to ensure that B2DROP has the same mount point on the
 host running EasyVVUQ and in the jobs.
 
 (2) The input files are passed to the jobs using the PROMINENCE input
-files mechanism which limits the size of the files. Output from
-the simulation is retrieved using the PROMINENCE log mechanism.
-Therefore the simulation output needs to be printed to stdout in 
+files mechanism. Note that this limits the size of the files. Output
+from the simulation is retrieved using the PROMINENCE log mechanism,
+therefore the simulation output needs to be printed to stdout in 
 the job. Again, if the simulation produces complicated or large output
-you should extract the quantitities of interest on the Pod using some
+you should extract the quantitities of interest in the job using some
 kind of script and print them to stdout.
 """
 
