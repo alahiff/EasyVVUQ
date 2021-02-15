@@ -161,7 +161,7 @@ class ExecuteProminence(BaseAction):
         An output file name for the output of the simulation.
     """
 
-    def __init__(self, job_config, input_file_names=None, output_file_name=None):
+    def __init__(self, job_config, input_file_names=[], output_file_name=None):
         if os.name == 'nt':
             msg = ('Local execution is provided for testing on Posix systems'
                    'only. We detect you are using Windows.')
